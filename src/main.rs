@@ -1,17 +1,16 @@
-use core::{
-    cell::Cell,
-    fmt::Display,
-    ops::{Neg, Not},
-};
+#[cfg(test)]
+mod tests;
+// wird nur mit compiliert falls wir die tests mit cargo test ausführen
+
+use core::{fmt::Display, ops::Not};
 use rand::prelude::*;
-use std::io::{self, stdin};
+use std::io::{self};
 
 fn main() {
-    //random wer anfängt
-    let mut ttt = &mut TikTakToe::default();
+    let ttt = &mut TikTakToe::default();
 
-    let mut rng = rand::thread_rng();
-    if rng.gen_bool(0.5) {
+    //random wer anfängt
+    if rand::thread_rng().gen_bool(0.5) {
         //bot move
         ttt.turn(Index::One, Index::One);
     }
@@ -32,14 +31,14 @@ fn main() {
         //println!("{}", ttt);
     }
 
-    let mut ttt = &mut TikTakToe::default();
-    ttt.turn(Index::Two, Index::Two);
-    ttt.turn(Index::One, Index::Two);
-    let winner = ttt.turn(Index::One, Index::Three);
-    let winner = ttt.turn(Index::One, Index::One);
-    let winner = ttt.turn(Index::Three, Index::One);
-    println!("{}", ttt);
-    println!("{:#?}", winner);
+    // let mut ttt = &mut TikTakToe::default();
+    // ttt.turn(Index::Two, Index::Two);
+    // ttt.turn(Index::One, Index::Two);
+    // let winner_one = ttt.turn(Index::One, Index::Three);
+    // let winner_two = ttt.turn(Index::One, Index::One);
+    // let winner_three = ttt.turn(Index::Three, Index::One);
+    // println!("{}", ttt);
+    // println!("{:?} {:?} {:?}", winner_one, winner_two, winner_three);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
