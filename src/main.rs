@@ -2,29 +2,33 @@
 mod tests;
 // wird nur mit compiliert falls wir die tests mit cargo test ausführen
 
-use core::{fmt::Display, ops::Not};
+use core::{cell::Cell, fmt::Display, ops::Not};
+use enum_iterator::{all, Sequence};
 use rand::prelude::*;
 use std::io::{self};
 
 fn main() {
     let ttt = &mut TikTakToe::default();
 
-    //random wer anfängt
-    if rand::thread_rng().gen_bool(0.5) {
-        //bot move
-        ttt.turn(Index::One, Index::One);
-    }
+    // //random wer anfängt
+    // if rand::thread_rng().gen_bool(0.5) {
+    //     //bot move
+    //     ttt.turn(Index::One, Index::One);
+    // }
 
     println!("{}", ttt);
 
     loop {
         let (x, y) = input_ttt();
-        let win = ttt.turn(x, y);
+        let win = ttt.turn(x, y).unwrap();
         println!("{}", ttt);
         if let Some(w) = win {
             println!("{} has won", w);
             return;
         }
+
+        let bot_move = ttt.best_bot_move();
+        let win = ttt.turn(bot_move.0, bot_move.1);
 
         //bot -> smart move
         //bot turn
@@ -71,12 +75,14 @@ impl Display for CellState {
     }
 }
 
+#[derive(Debug, PartialEq, Sequence, Clone, Copy)]
 enum Index {
     One,
     Two,
     Three,
 }
 
+#[derive(Copy, Clone, Debug)]
 struct TikTakToe {
     matrix: (
         (Option<CellState>, Option<CellState>, Option<CellState>),
@@ -96,50 +102,50 @@ impl Default for TikTakToe {
 }
 
 impl TikTakToe {
-    fn turn(&mut self, x: Index, y: Index) -> Option<CellState> {
+    fn turn(&mut self, x: Index, y: Index) -> Result<Option<CellState>, ()> {
         let new = match x {
-            Index::One => (
-                Self::line_index(self.matrix.0, y, self.current),
+            Index::One => Ok((
+                Self::line_index(self.matrix.0, y, self.current)?,
                 self.matrix.1,
                 self.matrix.2,
-            ),
-            Index::Two => (
+            )),
+            Index::Two => Ok((
                 self.matrix.0,
-                Self::line_index(self.matrix.1, y, self.current),
+                Self::line_index(self.matrix.1, y, self.current)?,
                 self.matrix.2,
-            ),
-            Index::Three => (
+            )),
+            Index::Three => Ok((
                 self.matrix.0,
                 self.matrix.1,
-                Self::line_index(self.matrix.2, y, self.current),
-            ),
+                Self::line_index(self.matrix.2, y, self.current)?,
+            )),
         };
-        self.matrix = new;
+        self.matrix = new?;
         self.current = !self.current;
 
-        self.determination()
+        Ok(self.winner_determination())
     }
 
     fn line_index(
         line: (Option<CellState>, Option<CellState>, Option<CellState>),
         y: Index,
         current: CellState,
-    ) -> (Option<CellState>, Option<CellState>, Option<CellState>) {
+    ) -> Result<(Option<CellState>, Option<CellState>, Option<CellState>), ()> {
         match y {
-            Index::One => (Self::set(line.0, current), line.1, line.2),
-            Index::Two => (line.0, Self::set(line.1, current), line.2),
-            Index::Three => (line.0, line.1, Self::set(line.2, current)),
+            Index::One => Ok((Self::set(line.0, current)?, line.1, line.2)),
+            Index::Two => Ok((line.0, Self::set(line.1, current)?, line.2)),
+            Index::Three => Ok((line.0, line.1, Self::set(line.2, current)?)),
         }
     }
 
-    fn set(cell: Option<CellState>, current: CellState) -> Option<CellState> {
+    fn set(cell: Option<CellState>, current: CellState) -> Result<Option<CellState>, ()> {
         match cell {
-            Some(_) => panic!("Illegal Move"),
-            None => Some(current),
+            Some(_) => Err(()),
+            None => Ok(Some(current)),
         }
     }
 
-    fn determination(&self) -> Option<CellState> {
+    fn winner_determination(&self) -> Option<CellState> {
         fn line(
             line: (Option<CellState>, Option<CellState>, Option<CellState>),
         ) -> Option<CellState> {
@@ -165,6 +171,93 @@ impl TikTakToe {
 
         vec.iter().filter_map(|x| *x).next()
     }
+
+    fn possible_moves(self) -> Vec<(Index, Index)> {
+        let mut working_self = self;
+        let mut out = vec![];
+        for x in all::<Index>() {
+            for y in all::<Index>() {
+                if working_self.turn(x, y).is_ok() {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
+    }
+
+    // move Some - End game None
+    fn best_bot_move(&self) -> Option<(Index, Index)> {
+        let who = self.current;
+        for moves in self.possible_moves().iter() {
+            let mut game = self.clone();
+            // move is definetifly possible -> unwrap
+            let winner = game.turn(moves.0, moves.1).unwrap();
+            match winner {
+                Some(winner) => {
+                    if winner == who {
+                        return Some((moves.0, moves.1));
+                    }
+                }
+                None => {
+                    let best_enemy_move = game.best_bot_move();
+                    match best_enemy_move {
+                        None => return Some((moves.0, moves.1)),
+                        Some(best_enemy_move) => match game
+                            .turn(best_enemy_move.0, best_enemy_move.1)
+                            .unwrap()
+                        {
+                            Some(winner) => {
+                                if winner == who {
+                                    return Some((moves.0, moves.1));
+                                }
+                            }
+                            //Draw
+                            None => return Some(self.possible_moves().first().unwrap().clone()),
+                        },
+                    }
+                }
+            }
+        }
+        return None;
+    }
+
+    // returns the best move for a bot_player in the szenario
+    // fn best_bot_move(&self, who: CellState) -> Option<(Index, Index)> {
+    //     let mut to_return = vec![];
+    //     for moves in self.possible_moves().iter() {
+    //         let mut game_cp = self.clone();
+    //         let winner = game_cp.turn(moves.0, moves.1).unwrap();
+    //         match winner {
+    //             None => {
+    //                 //best move for enemy
+    //                 let best_enemy = game_cp.best_bot_move(!who);
+    //                 let winner = game_cp.turn(best_enemy.0, best_enemy.1).unwrap();
+    //                 match winner {
+    //                     Some(winner) => {
+    //                         if winner == who {
+    //                             to_return.push((moves.0, moves.1));
+    //                         }
+    //                         //otherwise discard it
+    //                     }
+    //                     None => {
+    //                         let move_self = game_cp.best_bot_move(who);
+    //                         to_return.push((move_self.0, move_self.1));
+    //                     }
+    //                 }
+    //             }
+    //             Some(winner) => {
+    //                 if winner == who {
+    //                     to_return.push((moves.0, moves.1));
+    //                 }
+    //             } //otherwise discard it
+    //         }
+    //     }
+    //     let first = to_return.first().cloned();
+    //     match first {
+    //         None => self.possible_moves().iter().next().cloned(),
+    //         Some(first) => Some(first.clone()),
+    //     }
+    //}
 }
 
 impl Display for TikTakToe {
